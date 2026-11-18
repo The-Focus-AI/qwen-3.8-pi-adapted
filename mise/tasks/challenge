@@ -82,7 +82,7 @@ step "snapshot /metrics (before)"
 curl -sf "$BASE/metrics" >"$BEFORE" 2>/dev/null || true
 echo "saved $(wc -c <"$BEFORE" | tr -d ' ') bytes"
 
-STREAM_PY="$ROOT/mise/tasks/challenge-stream.py"
+STREAM_PY="$ROOT/scripts/challenge-stream.py"
 
 step "run π (live tool stream)"
 echo "(tool calls + assistant text below; raw JSONL → $EVENT_LOG)"
