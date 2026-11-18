@@ -183,6 +183,7 @@ mise run pi -- --print --no-session "The capital of France?"
 | Challenge | Prompt | Needs |
 |---|---|---|
 | [`labs-sqlite-search`](challenges/labs-sqlite-search/) | Bun app: crawl [labs.thefocus.ai](https://labs.thefocus.ai), SQLite + search; llama `:9931` for understanding; Ollama `embeddinggemma-2` for embeddings | `serve` + `ollama pull embeddinggemma-2` |
+| [`pelican-bicycle`](challenges/pelican-bicycle/) | Animated SVG of a pelican riding a bicycle | `serve` |
 | [`stream-chat-cli`](challenges/stream-chat-cli/) | Streaming Bun chat CLI vs `/v1` | `serve` |
 | [`health-and-models`](challenges/health-and-models/) | `/health` + `/v1/models` check for `qwen3.8-pi` | `serve` |
 | [`dual-endpoint-compare`](challenges/dual-endpoint-compare/) | Same prompt, two endpoints side by side | `serve` |
