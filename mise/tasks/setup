@@ -53,8 +53,17 @@ PY
     chip=$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Chip:/{print $2; exit}' || echo unknown)
   fi
 
-  model_path="${MODEL:-weights/Qwen3.8-27B-Q8_0.gguf}"
-  model_gb=28
+  # Prefer the default serve quant (Q4) when present; else Q8; else env MODEL.
+  if [[ -n "${MODEL:-}" ]]; then
+    model_path="$MODEL"
+  elif [[ -f weights/Qwen3.8-27B-Q4_K_M.gguf ]]; then
+    model_path="weights/Qwen3.8-27B-Q4_K_M.gguf"
+  elif [[ -f weights/Qwen3.8-27B-Q8_0.gguf ]]; then
+    model_path="weights/Qwen3.8-27B-Q8_0.gguf"
+  else
+    model_path="weights/Qwen3.8-27B-Q4_K_M.gguf"
+  fi
+  model_gb=16
   if [[ -f "$model_path" ]]; then
     model_bytes=$(stat -f%z "$model_path" 2>/dev/null || stat -c%s "$model_path" 2>/dev/null || echo 0)
     if (( model_bytes > 0 )); then
@@ -159,16 +168,59 @@ else
   echo "models.json present: .pi/agent/models.json"
 fi
 
-# --- Optional: project-local pi-llama extension (builtin covers llama.cpp) --
-if [[ -f .pi/settings.json ]] && grep -q 'huggingface/pi-llama' .pi/settings.json; then
-  echo "Extension already local: git:github.com/huggingface/pi-llama"
+# --- Project-local pi packages (.pi/settings.json; clones reinstall via setup) ---
+# Package payloads live under .pi/git/ and .pi/npm/ (gitignored). settings.json
+# lists what to install; always re-run so a fresh clone gets them.
+export PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$PWD/.pi/agent}"
+
+install_pi_pkg() {
+  local src="$1"
+  echo "Ensuring project-local package: $src"
+  # --approve: trust project .pi for this non-interactive install
+  "$PI_BIN" install -l --approve "$src"
+}
+
+install_pi_pkg "git:github.com/huggingface/pi-llama"
+install_pi_pkg "npm:pi-lens"
+install_pi_pkg "git:github.com/badlogic/pi-subagent"
+
+# pi-lens needs @ast-grep/cli native binary. Prefer rebuild; install-scripts is
+# only on newer npm and is not available on npm 11.
+if [[ -d .pi/npm/node_modules/@ast-grep/cli ]]; then
+  echo "Rebuilding @ast-grep/cli for pi-lens..."
+  (cd .pi/npm && npm rebuild @ast-grep/cli >/dev/null 2>&1 || true)
+fi
+
+if [[ -d .pi/npm/node_modules/pi-lens ]]; then
+  echo "pi-lens ready: .pi/npm/node_modules/pi-lens (project-local only)"
 else
-  echo "Installing pi-llama extension project-locally (-l)..."
-  PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$PWD/.pi/agent}" \
-    "$PI_BIN" install -l git:github.com/huggingface/pi-llama
+  echo "Warning: pi-lens not found under .pi/npm after install" >&2
+fi
+
+# pi-subagent: CLI must be on PATH; package also needs tmux at runtime.
+SUBAGENT_SRC=".pi/git/github.com/badlogic/pi-subagent/subagent.ts"
+mkdir -p .pi/agent/bin
+if [[ -f "$SUBAGENT_SRC" ]]; then
+  ln -sfn "$(cd "$(dirname "$SUBAGENT_SRC")" && pwd)/subagent.ts" .pi/agent/bin/subagent
+  chmod +x .pi/agent/bin/subagent "$SUBAGENT_SRC" 2>/dev/null || true
+  echo "subagent CLI: .pi/agent/bin/subagent -> $SUBAGENT_SRC"
+else
+  echo "Warning: pi-subagent source missing after install" >&2
+fi
+
+if command -v tmux >/dev/null 2>&1; then
+  echo "tmux found: $(command -v tmux) ($(tmux -V 2>/dev/null || true))"
+else
+  if command -v brew >/dev/null 2>&1; then
+    echo "tmux not found — installing via Homebrew (required by pi-subagent)..."
+    brew install tmux
+  else
+    echo "Warning: tmux missing; pi-subagent spawn will fail until you install it." >&2
+  fi
 fi
 
 echo
 echo "Setup complete."
 echo "  mise run serve   # start llama.cpp with Pi LoRA (uses CONTEXT from mise.local.toml)"
 echo "  mise run pi      # talk to it via local pi (model: local/qwen3.8-pi)"
+echo "  mise run pi:tmp  # scratch dir + pi (pi-lens + subagent; start a fresh session after setup)"

@@ -24,9 +24,16 @@ echo "Alias:   $ALIAS"
 echo "Context: $CONTEXT"
 echo "(Bonsai Q2_0 — no LoRA; labelled extreme lossy)"
 
-exec llama-server \
+LOG_DIR="${LOG_DIR:-logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/llama-server.log}"
+
+exec env -u LLAMA_API_KEY llama-server \
   -m "$MODEL" \
   --reasoning off \
   -c "$CONTEXT" \
   --port "$PORT" \
-  --alias "$ALIAS"
+  --alias "$ALIAS" \
+  --metrics \
+  --slots \
+  --log-file "$LOG_FILE"

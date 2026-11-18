@@ -1,0 +1,185 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Decode tok/s (GPU-time avg)",
+      "description": "tokens_predicted_total / tokens_predicted_seconds_total — stays after traffic; not wall-clock rate()",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 13,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "cps", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{
+        "expr": "{__name__=\"llamacpp:tokens_predicted_total\"} / clamp_min({__name__=\"llamacpp:tokens_predicted_seconds_total\"}, 1e-9)",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Prefill tok/s (GPU-time avg)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 14,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "cps", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{
+        "expr": "{__name__=\"llamacpp:prompt_tokens_total\"} / clamp_min({__name__=\"llamacpp:prompt_seconds_total\"}, 1e-9)",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Predicted tokens",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "{__name__=\"llamacpp:tokens_predicted_total\"}", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "Requests processing",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "expr": "{__name__=\"llamacpp:requests_processing\"}", "refId": "A" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Cumulative tokens/seconds — this is the durable tok/s signal. Flat when idle is expected for rate(); this panel stays.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "{__name__=\"llamacpp:tokens_predicted_total\"} / clamp_min({__name__=\"llamacpp:tokens_predicted_seconds_total\"}, 1e-9)",
+          "legendFormat": "decode tok/s (GPU-time)",
+          "refId": "A"
+        },
+        {
+          "expr": "{__name__=\"llamacpp:prompt_tokens_total\"} / clamp_min({__name__=\"llamacpp:prompt_seconds_total\"}, 1e-9)",
+          "legendFormat": "prefill tok/s (GPU-time)",
+          "refId": "B"
+        }
+      ],
+      "title": "Throughput from counters (survives idle)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Wall-clock rate() only moves while counters are increasing. Idle → 0.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "id": 20,
+      "targets": [
+        {
+          "expr": "rate({__name__=\"llamacpp:tokens_predicted_total\"}[30s])",
+          "legendFormat": "decode wall tok/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate({__name__=\"llamacpp:prompt_tokens_total\"}[30s])",
+          "legendFormat": "prefill wall tok/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Wall-clock rate() — only during active gen",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "{__name__=\"llamacpp:tokens_predicted_total\"}",
+          "legendFormat": "predicted total",
+          "refId": "A"
+        },
+        {
+          "expr": "{__name__=\"llamacpp:prompt_tokens_total\"}",
+          "legendFormat": "prompt total",
+          "refId": "B"
+        }
+      ],
+      "title": "Cumulative tokens",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "llama.cpp sets these for the last finished request, then zeros them when idle. Need a scrape mid/post-request.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "always", "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "{__name__=\"llamacpp:predicted_tokens_seconds\"}",
+          "legendFormat": "last decode (zeros idle)",
+          "refId": "A"
+        },
+        {
+          "expr": "{__name__=\"llamacpp:prompt_tokens_seconds\"}",
+          "legendFormat": "last prefill (zeros idle)",
+          "refId": "B"
+        }
+      ],
+      "title": "Last-request gauges (sparse)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1s",
+  "schemaVersion": 39,
+  "tags": ["llama.cpp", "qwen"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "llama-server (Qwen / π)",
+  "uid": "llama-server-local",
+  "version": 3
+}

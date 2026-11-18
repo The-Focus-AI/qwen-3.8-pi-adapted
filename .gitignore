@@ -20,6 +20,9 @@ work-test/
 # Inference hill-climb run logs (keep PLAN/ledger/configs/scripts)
 experiments/inference/logs/
 
+# llama-server logs + scraped stats
+logs/
+
 # Model weights (keep directory placeholders)
 weights/*
 !weights/.gitignore
@@ -28,6 +31,7 @@ weights/*
 
 # Pi: cloned packages + runtime (keep project settings + models.json)
 .pi/git/
+.pi/npm/
 .pi/agent/sessions/
 .pi/agent/bin/
 .pi/agent/auth.json

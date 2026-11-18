@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#MISE description="Snapshot llama-server /metrics + /slots; append to logs/serve-stats.jsonl"
+set -euo pipefail
+
+PORT="${PORT:-9931}"
+BASE="${LLAMA_BASE_URL:-http://127.0.0.1:$PORT}"
+BASE="${BASE%/}"
+LOG_DIR="${LOG_DIR:-logs}"
+OUT="${STATS_FILE:-$LOG_DIR/serve-stats.jsonl}"
+mkdir -p "$LOG_DIR"
+
+AUTH=()
+if [[ -n "${LLAMA_API_KEY:-}" ]]; then
+  AUTH=(-H "Authorization: Bearer $LLAMA_API_KEY")
+fi
+
+if ! curl -sf "${AUTH[@]}" "$BASE/health" >/dev/null 2>&1; then
+  echo "Server not reachable at $BASE — start with: mise run serve" >&2
+  exit 1
+fi
+
+metrics=$(curl -sf "${AUTH[@]}" "$BASE/metrics" 2>/dev/null || true)
+slots=$(curl -sf "${AUTH[@]}" "$BASE/slots" 2>/dev/null || echo '[]')
+
+python3 - "$OUT" <<'PY' "$metrics" "$slots"
+import json, re, sys, time
+from datetime import datetime, timezone
+
+out_path = sys.argv[1]
+metrics_text = sys.argv[2]
+slots_raw = sys.argv[3]
+
+def scrape(text: str) -> dict:
+    vals = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        # name{labels} value   or   name value
+        m = re.match(r"^([a-zA-Z0-9_:]+)(?:\{[^}]*\})?\s+([-+0-9.eE]+)\s*$", line)
+        if not m:
+            continue
+        name, val = m.group(1), float(m.group(2))
+        # keep last / sum-friendly scalars; prefer unlabeled
+        if name not in vals or "{" not in line.split()[0]:
+            vals[name] = val
+    return vals
+
+m = scrape(metrics_text)
+try:
+    slots = json.loads(slots_raw) if slots_raw else []
+except json.JSONDecodeError:
+    slots = []
+
+busy = sum(1 for s in slots if isinstance(s, dict) and s.get("is_processing"))
+row = {
+    "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "unix": int(time.time()),
+    "slots_total": len(slots) if isinstance(slots, list) else None,
+    "slots_busy": busy,
+    # Common llama.cpp server metric names (version-dependent; absent → null)
+    "prompt_tokens_total": m.get("llamacpp:prompt_tokens_total", m.get("prompt_tokens_total")),
+    "tokens_predicted_total": m.get("llamacpp:tokens_predicted_total", m.get("tokens_predicted_total")),
+    "prompt_seconds_total": m.get("llamacpp:prompt_seconds_total", m.get("prompt_seconds_total")),
+    "predicted_seconds_total": m.get("llamacpp:predicted_seconds_total", m.get("predicted_seconds_total")),
+    "requests_processing": m.get("llamacpp:requests_processing", m.get("requests_processing")),
+    "requests_deferred": m.get("llamacpp:requests_deferred", m.get("requests_deferred")),
+    "kv_cache_usage_ratio": m.get("llamacpp:kv_cache_usage_ratio", m.get("kv_cache_usage_ratio")),
+    "metrics_raw_keys": sorted(m.keys())[:40],
+}
+
+# Derived rates from cumulative counters when seconds > 0
+pt, ps = row["prompt_tokens_total"], row["prompt_seconds_total"]
+dt, ds = row["tokens_predicted_total"], row["predicted_seconds_total"]
+row["prefill_tok_s_avg"] = round(pt / ps, 2) if pt and ps and ps > 0 else None
+row["decode_tok_s_avg"] = round(dt / ds, 2) if dt and ds and ds > 0 else None
+
+with open(out_path, "a") as f:
+    f.write(json.dumps(row) + "\n")
+
+print(f"ts                 {row['ts']}")
+print(f"slots              {row['slots_busy']}/{row['slots_total']} busy")
+print(f"prompt_tokens      {row['prompt_tokens_total']}")
+print(f"predicted_tokens   {row['tokens_predicted_total']}")
+print(f"prefill avg tok/s  {row['prefill_tok_s_avg']}")
+print(f"decode  avg tok/s  {row['decode_tok_s_avg']}")
+print(f"kv_cache_usage     {row['kv_cache_usage_ratio']}")
+print(f"appended           {out_path}")
+if not metrics_text.strip():
+    print("(no /metrics yet — restart with mise run serve so --metrics is on)", file=sys.stderr)
+elif not any(k.startswith("llamacpp:") or "token" in k for k in m):
+    print(f"metric keys seen: {', '.join(sorted(m)[:12]) or '(none)'}", file=sys.stderr)
+PY

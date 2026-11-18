@@ -1,5 +1,7 @@
 {
   "packages": [
-    "git:github.com/huggingface/pi-llama"
+    "git:github.com/huggingface/pi-llama",
+    "npm:pi-lens",
+    "git:github.com/badlogic/pi-subagent"
   ]
 }

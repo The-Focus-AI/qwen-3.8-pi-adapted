@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+#MISE description="Timed π challenge (wall clock + /metrics Δ → logs/challenges.jsonl)"
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$ROOT"
+
+NAME="${CHALLENGE:-${1:-}}"
+if [[ -z "$NAME" || "$NAME" == "-h" || "$NAME" == "--help" ]]; then
+  cat >&2 <<'EOF'
+Usage:
+  mise run challenge -- <name>
+  CHALLENGE=<name> mise run challenge
+
+Available challenges:
+EOF
+  for d in challenges/*/PROMPT.md; do
+    [[ -f "$d" ]] || continue
+    printf '  %s\n' "$(basename "$(dirname "$d")")" >&2
+  done
+  echo >&2
+  echo "Runs π in --mode json so tool calls stream live, times wall clock +" >&2
+  echo "llama.cpp /metrics delta, appends logs/challenges.jsonl." >&2
+  exit 1
+fi
+
+PROMPT_FILE="challenges/$NAME/PROMPT.md"
+if [[ ! -f "$PROMPT_FILE" ]]; then
+  echo "Unknown challenge: $NAME (expected $PROMPT_FILE)" >&2
+  exit 1
+fi
+
+PI_BIN="$ROOT/node_modules/.bin/pi"
+if [[ ! -x "$PI_BIN" ]]; then
+  echo "Local pi not installed. Run: mise run setup" >&2
+  exit 1
+fi
+
+export LLAMA_BASE_URL="${LLAMA_BASE_URL:-http://127.0.0.1:9931}"
+export LLAMA_API_KEY="${LLAMA_API_KEY:-dummy}"
+export PATH="$ROOT/node_modules/.bin:$ROOT/.pi/agent/bin:${PATH:-}"
+
+BASE="${LLAMA_BASE_URL%/}"
+if ! curl -sf "$BASE/health" >/dev/null 2>&1 && ! curl -sf "$BASE/v1/models" >/dev/null 2>&1; then
+  echo "llama.cpp server not reachable at $BASE" >&2
+  echo "Start it in another terminal: mise run serve" >&2
+  exit 1
+fi
+
+step() { printf '\n==> %s\n' "$*"; }
+
+step "prepare workdir"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-challenge-${NAME}.XXXXXX")"
+ln -sfn "$ROOT/.pi" "$WORKDIR/.pi"
+export PI_CODING_AGENT_DIR="$WORKDIR/.pi/agent"
+EVENT_LOG="$WORKDIR/pi-events.jsonl"
+
+mkdir -p logs
+PROMPT="$(cat "$PROMPT_FILE")"
+MODEL="${PI_MODEL:-local/qwen3.8-pi}"
+
+echo "challenge: $NAME"
+echo "workdir:   $WORKDIR"
+echo "events:    $EVENT_LOG"
+echo "prompt:    $PROMPT_FILE"
+echo "model:     $MODEL"
+echo "server:    $BASE"
+echo "measure:   wall_s + llamacpp /metrics delta"
+echo
+echo "----- prompt -----"
+# show first ~20 lines so you can see what's being asked
+head -n 20 "$PROMPT_FILE"
+LINES="$(wc -l < "$PROMPT_FILE" | tr -d ' ')"
+if [[ "$LINES" -gt 20 ]]; then
+  echo "... ($((LINES - 20)) more lines)"
+fi
+echo "------------------"
+
+BEFORE="$(mktemp)"
+AFTER="$(mktemp)"
+step "snapshot /metrics (before)"
+curl -sf "$BASE/metrics" >"$BEFORE" 2>/dev/null || true
+echo "saved $(wc -c <"$BEFORE" | tr -d ' ') bytes"
+
+STREAM_PY="$ROOT/mise/tasks/challenge-stream.py"
+
+step "run π (live tool stream)"
+echo "(tool calls + assistant text below; raw JSONL → $EVENT_LOG)"
+echo
+
+START_NS="$(python3 -c 'import time; print(time.time_ns())')"
+set +e
+# --mode json streams every tool/turn event; tee keeps a raw log.
+# challenge-stream.py turns JSONL into a human play-by-play.
+(
+  cd "$WORKDIR"
+  "$PI_BIN" \
+    --model "$MODEL" \
+    --api-key "$LLAMA_API_KEY" \
+    --approve \
+    --mode json \
+    --no-session \
+    --tools read,bash,edit,write,grep,find,ls \
+    "$PROMPT"
+) | tee "$EVENT_LOG" | python3 -u "$STREAM_PY"
+RC=${PIPESTATUS[0]}
+set -e
+END_NS="$(python3 -c 'import time; print(time.time_ns())')"
+
+step "snapshot /metrics (after)"
+curl -sf "$BASE/metrics" >"$AFTER" 2>/dev/null || true
+
+step "write timing row"
+python3 - "$NAME" "$WORKDIR" "$START_NS" "$END_NS" "$RC" "$BEFORE" "$AFTER" "$EVENT_LOG" <<'PY'
+import json, re, sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+name, workdir, start_ns, end_ns, rc, before_p, after_p, event_log = sys.argv[1:9]
+wall_s = round((int(end_ns) - int(start_ns)) / 1e9, 2)
+rc = int(rc)
+
+def scrape(path):
+    vals = {}
+    try:
+        text = open(path).read()
+    except OSError:
+        return vals
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = re.match(r"^([a-zA-Z0-9_:]+)(?:\{[^}]*\})?\s+([-+0-9.eE]+)\s*$", line)
+        if m:
+            vals[m.group(1)] = float(m.group(2))
+    return vals
+
+b, a = scrape(before_p), scrape(after_p)
+
+def delta(k):
+    if k in a and k in b:
+        return a[k] - b[k]
+    return None
+
+prompt_tok = delta("llamacpp:prompt_tokens_total")
+pred_tok = delta("llamacpp:tokens_predicted_total")
+prompt_s = delta("llamacpp:prompt_seconds_total")
+pred_s = delta("llamacpp:tokens_predicted_seconds_total")
+
+def rate(n, s):
+    if n is None or s is None or s <= 0:
+        return None
+    return round(n / s, 2)
+
+tool_counts = {}
+turns = 0
+try:
+    for line in open(event_log):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "turn_start":
+            turns += 1
+        if ev.get("type") == "tool_execution_end":
+            n = ev.get("toolName") or "?"
+            tool_counts[n] = tool_counts.get(n, 0) + 1
+except OSError:
+    pass
+
+row = {
+    "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "challenge": name,
+    "workdir": workdir,
+    "exit_code": rc,
+    "ok": rc == 0,
+    "wall_s": wall_s,
+    "turns": turns,
+    "tools": tool_counts,
+    "llama_prompt_tokens": prompt_tok,
+    "llama_predicted_tokens": pred_tok,
+    "llama_prompt_seconds": prompt_s,
+    "llama_predicted_seconds": pred_s,
+    "llama_prefill_tok_s": rate(prompt_tok, prompt_s),
+    "llama_decode_tok_s": rate(pred_tok, pred_s),
+    "event_log": event_log,
+}
+path = "logs/challenges.jsonl"
+with open(path, "a") as f:
+    f.write(json.dumps(row) + "\n")
+
+print()
+print("======== challenge timing ========")
+print(f"challenge          {row['challenge']}")
+print(f"exit_code          {row['exit_code']}")
+print(f"wall_s             {row['wall_s']}")
+print(f"turns              {row['turns']}")
+print(f"tools              {row['tools']}")
+print(f"prompt_tokens Δ    {row['llama_prompt_tokens']}")
+print(f"predicted_tokens Δ {row['llama_predicted_tokens']}")
+print(f"prefill tok/s      {row['llama_prefill_tok_s']}")
+print(f"decode tok/s       {row['llama_decode_tok_s']}")
+print(f"workdir            {row['workdir']}")
+print(f"event_log          {row['event_log']}")
+print(f"logged             {path}")
+PY
+
+rm -f "$BEFORE" "$AFTER"
+exit "$RC"

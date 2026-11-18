@@ -16,7 +16,9 @@ Config via env: `LLAMA_BASE_URL`, `LLAMA_MODEL`, `LLAMA_API_KEY`.
 ### What I learned building it
 
 - **The server enforces an API key.** Every request needs
-  `Authorization: Bearer $LLAMA_API_KEY` or you get a `401`. Always send it.
+  `Authorization: Bearer $LLAMA_API_KEY` (defaults to `dummy`). Local `mise run serve`
+  clears the key in the server process so unauthenticated probes do not spam logs;
+  if you start `llama-server` yourself with `LLAMA_API_KEY` set, you must send it.
 - **Stream = SSE, not NDJSON.** Responses are `data: {...}` lines separated by
   blank lines (`\n\n`), ending with `data: [DONE]`. Buffer until you see the
   blank-line separator, then parse each `data:` payload's

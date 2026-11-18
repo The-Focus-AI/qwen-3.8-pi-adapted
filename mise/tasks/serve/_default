@@ -47,19 +47,37 @@ if [[ ! -f "$MODEL" ]]; then
   exit 1
 fi
 
+LOG_DIR="${LOG_DIR:-logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/llama-server.log}"
+
 echo "Model:   $MODEL"
 echo "Adapter: $ADAPTER"
 echo "Port:    $PORT"
 echo "Alias:   $ALIAS"
 echo "Context: $CONTEXT"
+echo "Metrics: http://127.0.0.1:${PORT}/metrics  (Prometheus)"
+echo "Slots:   http://127.0.0.1:${PORT}/slots"
+echo "Log:     $LOG_FILE"
+echo "Stats:   mise run stats   |   mise run stats:watch"
 if [[ ! -f mise.local.toml ]]; then
   echo "(tip: run mise run setup to size CONTEXT for this machine)" >&2
 fi
 
-exec llama-server \
+# mise.toml sets LLAMA_API_KEY for clients; if the server inherits it, every
+# unauthenticated probe (health checks, browsers) logs "unauthorized".
+# Keep local serve open; clients may still send Bearer dummy.
+#
+# --metrics: Prometheus counters (prompt/predicted tokens, timings)
+# --slots: live per-slot state (also default-on; keep explicit)
+# --log-file: durable request/server log for this run
+exec env -u LLAMA_API_KEY llama-server \
   -m "$MODEL" \
   --lora "$ADAPTER" \
   --reasoning off \
   -c "$CONTEXT" \
   --port "$PORT" \
-  --alias "$ALIAS"
+  --alias "$ALIAS" \
+  --metrics \
+  --slots \
+  --log-file "$LOG_FILE"

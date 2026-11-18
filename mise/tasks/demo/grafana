@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#MISE description="Foreground Prometheus+Grafana demo (Ctrl-C stops & removes containers)"
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+DEMO="$ROOT/demo/grafana"
+PORT="${PORT:-9931}"
+PROM_PORT="${PROM_PORT:-9090}"
+GRAFANA_PORT="${GRAFANA_PORT:-3000}"
+PROM_NAME="${PROM_NAME:-qwen-prom}"
+GRAFANA_NAME="${GRAFANA_NAME:-qwen-grafana}"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker is required for this demo." >&2
+  exit 1
+fi
+
+if ! curl -sf "http://127.0.0.1:${PORT}/metrics" >/dev/null 2>&1; then
+  echo "llama-server /metrics not reachable on :${PORT}." >&2
+  echo "In another terminal: mise run serve   (needs --metrics; restart if an old serve is up)" >&2
+  exit 1
+fi
+
+cleanup() {
+  echo
+  echo "Shutting down demo containers..."
+  docker rm -f "$GRAFANA_NAME" "$PROM_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+# Clear any leftover names from a previous crash
+docker rm -f "$GRAFANA_NAME" "$PROM_NAME" >/dev/null 2>&1 || true
+
+echo "Starting Prometheus (scrape host llama-server :${PORT}/metrics)..."
+docker run --rm -d --name "$PROM_NAME" \
+  --add-host=host.docker.internal:host-gateway \
+  -p "${PROM_PORT}:9090" \
+  -v "$DEMO/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+  prom/prometheus:v2.55.1 \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --web.enable-lifecycle \
+  >/dev/null
+
+echo "Starting Grafana..."
+docker run --rm -d --name "$GRAFANA_NAME" \
+  --add-host=host.docker.internal:host-gateway \
+  -p "${GRAFANA_PORT}:3000" \
+  -e GF_SECURITY_ADMIN_USER=admin \
+  -e GF_SECURITY_ADMIN_PASSWORD=admin \
+  -e GF_AUTH_ANONYMOUS_ENABLED=true \
+  -e GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer \
+  -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/llama-server.json \
+  -v "$DEMO/grafana/provisioning:/etc/grafana/provisioning:ro" \
+  -v "$DEMO/dashboards:/var/lib/grafana/dashboards:ro" \
+  grafana/grafana:11.3.1 \
+  >/dev/null
+
+# Point Grafana's Prometheus datasource at the published host port
+# (provisioned URL uses host.docker.internal:9090)
+sleep 1
+
+URL="http://127.0.0.1:${GRAFANA_PORT}/d/llama-server-local/llama-server-qwen-p"
+echo
+echo "Grafana:  $URL"
+echo "Login:    admin / admin  (anonymous viewer also on)"
+echo "Prom:     http://127.0.0.1:${PROM_PORT}"
+echo
+echo "Leave this terminal open. Ctrl-C stops Grafana + Prometheus."
+echo
+
+# Prefer opening the browser when possible
+if command -v open >/dev/null 2>&1; then
+  open "$URL" >/dev/null 2>&1 || true
+fi
+
+# Stay foreground: stream Grafana logs until interrupt
+docker logs -f "$GRAFANA_NAME"

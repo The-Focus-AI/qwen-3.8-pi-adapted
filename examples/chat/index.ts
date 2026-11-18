@@ -9,7 +9,7 @@ import * as readline from "node:readline";
 
 const BASE_URL = process.env.LLAMA_BASE_URL ?? "http://127.0.0.1:9931/v1";
 const MODEL = process.env.LLAMA_MODEL ?? "default";
-const API_KEY = process.env.LLAMA_API_KEY ?? "";
+const API_KEY = process.env.LLAMA_API_KEY ?? "dummy";
 
 const SYSTEM_PROMPT =
   "You are a helpful assistant. Keep answers concise.";

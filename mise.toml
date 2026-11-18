@@ -3,7 +3,8 @@ bun = "latest"
 node = "latest"
 
 [env]
-_.path = ["{{config_root}}/node_modules/.bin"]
+# node_modules bins + project-local pi package CLIs (e.g. subagent)
+_.path = ["{{config_root}}/node_modules/.bin", "{{config_root}}/.pi/agent/bin"]
 # Keep pi agent config (models.json, sessions, trust) inside the project
 PI_CODING_AGENT_DIR = "{{config_root}}/.pi/agent"
 LLAMA_BASE_URL = "http://127.0.0.1:9931"
