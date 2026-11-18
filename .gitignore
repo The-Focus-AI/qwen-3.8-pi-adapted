@@ -1,7 +1,21 @@
 # Dependencies / caches
 node_modules/
+.bun/
 .cache/
 .DS_Store
+dist/
+*.tsbuildinfo
+
+# Local env / secrets (examples read LLAMA_* from the environment)
+.env
+.env.*
+!.env.example
+
+# Machine-local mise env (CONTEXT sized by setup)
+mise.local.toml
+
+# Scratch experiments (not part of the shipped examples)
+work-test/
 
 # Model weights (keep directory placeholders)
 weights/*

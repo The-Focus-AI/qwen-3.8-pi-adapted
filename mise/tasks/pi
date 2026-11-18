@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run project-local pi against the llama.cpp server"
+#MISE description="Interactive pi against llama.cpp (optional initial prompt after --)"
 set -euo pipefail
 
 PI_BIN="./node_modules/.bin/pi"
@@ -19,13 +19,17 @@ if ! curl -sf "$BASE/health" >/dev/null 2>&1 && ! curl -sf "$BASE/v1/models" >/d
   exit 1
 fi
 
-# Current pi: --model provider/id + --api-key. Endpoint comes from .pi/agent/models.json
-# (not the old --api-base flag).
 MODEL="${PI_MODEL:-local/qwen3.8-pi}"
 
-echo "pi: $PI_BIN"
-echo "model: $MODEL"
-echo "agent: $PI_CODING_AGENT_DIR"
+echo "pi:     $PI_BIN"
+echo "model:  $MODEL"
+echo "agent:  $PI_CODING_AGENT_DIR"
 echo "server: $BASE"
+if [[ $# -gt 0 ]]; then
+  echo "prompt: $*"
+fi
+echo
 
+# Optional args after -- become the initial user message / pi flags.
+# One-shot coding with tools: mise run ask -- "..."
 exec "$PI_BIN" --model "$MODEL" --api-key "$LLAMA_API_KEY" "$@"

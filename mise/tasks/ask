@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#MISE description="One-shot pi coding run with tools (pass a prompt after --)"
+set -euo pipefail
+
+PI_BIN="./node_modules/.bin/pi"
+if [[ ! -x "$PI_BIN" ]]; then
+  echo "Local pi not installed. Run: mise run setup" >&2
+  exit 1
+fi
+
+if [[ $# -lt 1 ]]; then
+  cat >&2 <<'EOF'
+Usage:
+  mise run ask -- "your prompt here"
+
+Example:
+  mise run ask -- "Create examples/chat: a Bun/TypeScript interactive CLI that streams from the llama.cpp server on port 9931"
+EOF
+  exit 1
+fi
+
+export PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$PWD/.pi/agent}"
+export LLAMA_BASE_URL="${LLAMA_BASE_URL:-http://127.0.0.1:9931}"
+export LLAMA_API_KEY="${LLAMA_API_KEY:-dummy}"
+
+BASE="$LLAMA_BASE_URL"
+if ! curl -sf "$BASE/health" >/dev/null 2>&1 && ! curl -sf "$BASE/v1/models" >/dev/null 2>&1; then
+  echo "llama.cpp server not reachable at $BASE" >&2
+  echo "Start it in another terminal: mise run serve" >&2
+  exit 1
+fi
+
+MODEL="${PI_MODEL:-local/qwen3.8-pi}"
+
+echo "pi:     $PI_BIN"
+echo "model:  $MODEL"
+echo "server: $BASE"
+echo "mode:   one-shot (--print) with read/bash/edit/write/grep/find/ls"
+echo
+
+exec "$PI_BIN" \
+  --model "$MODEL" \
+  --api-key "$LLAMA_API_KEY" \
+  --print \
+  --no-session \
+  --tools read,bash,edit,write,grep,find,ls \
+  "$@"

@@ -6,6 +6,8 @@ WEIGHTS="${WEIGHTS:-weights}"
 MODEL="${MODEL:-$WEIGHTS/Qwen3.8-27B-Q8_0.gguf}"
 PORT="${PORT:-9931}"
 ALIAS="${ALIAS:-qwen3.8-pi}"
+# Set by `mise run setup` → mise.local.toml; override with CONTEXT=...
+CONTEXT="${CONTEXT:-32768}"
 
 ADAPTER="${ADAPTER:-}"
 if [[ -z "$ADAPTER" ]]; then
@@ -26,11 +28,15 @@ echo "Model:   $MODEL"
 echo "Adapter: $ADAPTER"
 echo "Port:    $PORT"
 echo "Alias:   $ALIAS"
+echo "Context: $CONTEXT"
+if [[ ! -f mise.local.toml ]]; then
+  echo "(tip: run mise run setup to size CONTEXT for this machine)" >&2
+fi
 
 exec llama-server \
   -m "$MODEL" \
   --lora "$ADAPTER" \
   --reasoning off \
-  -c 32768 \
+  -c "$CONTEXT" \
   --port "$PORT" \
   --alias "$ALIAS"
