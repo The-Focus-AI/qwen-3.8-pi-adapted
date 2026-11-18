@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Download Pi-adapted LoRA GGUF into weights/"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+REPO="${ADAPTER_REPO:-harness-hub/Qwen3.8-27B-pi-adapted-GGUF}"
+
+mkdir -p "$WEIGHTS"
+
+existing=$(ls "$WEIGHTS"/*lora*.gguf "$WEIGHTS"/*adapter*.gguf 2>/dev/null | head -n 1 || true)
+if [[ -n "$existing" ]]; then
+  echo "Already present: $existing"
+  exit 0
+fi
+
+echo "Downloading LoRA adapter(s) from $REPO → $WEIGHTS/ ..."
+hf download "$REPO" --include "*.gguf" --local-dir "$WEIGHTS"
+
+adapter=$(ls "$WEIGHTS"/*lora*.gguf "$WEIGHTS"/*adapter*.gguf 2>/dev/null | head -n 1 || true)
+if [[ -z "$adapter" ]]; then
+  echo "Download finished but no *lora*.gguf / *adapter*.gguf found in $WEIGHTS/." >&2
+  echo "List the repo with: hf repo ls $REPO" >&2
+  exit 1
+fi
+
+echo "Done: $adapter"

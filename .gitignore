@@ -1,1 +1,20 @@
+# Dependencies / caches
 node_modules/
+.cache/
+.DS_Store
+
+# Model weights (keep directory placeholders)
+weights/*
+!weights/.gitignore
+!weights/.gitkeep
+*.gguf
+
+# Pi: cloned packages + runtime (keep project settings + models.json)
+.pi/git/
+.pi/agent/sessions/
+.pi/agent/bin/
+.pi/agent/auth.json
+.pi/agent/trust.json
+.pi/agent/trust.json.lock
+.pi/agent/models-store.json
+.pi/agent/*.log

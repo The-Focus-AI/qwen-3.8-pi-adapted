@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Download base GGUF and Pi LoRA adapter from Hugging Face"
+#MISE depends=["download:model", "download:adapter"]
+set -euo pipefail
+
+echo "Downloads complete."

@@ -1,0 +1,13 @@
+[tools]
+node = "latest"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+# Keep pi agent config (models.json, sessions, trust) inside the project
+PI_CODING_AGENT_DIR = "{{config_root}}/.pi/agent"
+LLAMA_BASE_URL = "http://127.0.0.1:9931"
+LLAMA_API_KEY = "dummy"
+
+# Runs on `mise install` (even when tools are already installed).
+[hooks]
+postinstall = { task = "setup" }

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Download base Qwen3.8-27B Q8 GGUF into weights/"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+MODEL_NAME="${MODEL_NAME:-Qwen3.8-27B-Q8_0.gguf}"
+REPO="${MODEL_REPO:-ggml-org/Qwen3.8-27B-GGUF}"
+MODEL="$WEIGHTS/$MODEL_NAME"
+
+mkdir -p "$WEIGHTS"
+
+if [[ -f "$MODEL" ]]; then
+  echo "Already present: $MODEL"
+  exit 0
+fi
+
+echo "Downloading $MODEL_NAME from $REPO → $WEIGHTS/ ..."
+hf download "$REPO" "$MODEL_NAME" --local-dir "$WEIGHTS"
+echo "Done: $MODEL"

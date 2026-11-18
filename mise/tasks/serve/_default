@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#MISE description="Start llama.cpp with base Qwen + Pi LoRA adapter"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+MODEL="${MODEL:-$WEIGHTS/Qwen3.8-27B-Q8_0.gguf}"
+PORT="${PORT:-9931}"
+ALIAS="${ALIAS:-qwen3.8-pi}"
+
+ADAPTER="${ADAPTER:-}"
+if [[ -z "$ADAPTER" ]]; then
+  ADAPTER=$(ls "$WEIGHTS"/*lora*.gguf "$WEIGHTS"/*adapter*.gguf 2>/dev/null | head -n 1 || true)
+fi
+
+if [[ -z "$ADAPTER" || ! -f "$ADAPTER" ]]; then
+  echo "No LoRA adapter found in $WEIGHTS/. Set ADAPTER=... or run: mise run download:adapter" >&2
+  exit 1
+fi
+
+if [[ ! -f "$MODEL" ]]; then
+  echo "Base model not found: $MODEL — run: mise run download:model" >&2
+  exit 1
+fi
+
+echo "Model:   $MODEL"
+echo "Adapter: $ADAPTER"
+echo "Port:    $PORT"
+echo "Alias:   $ALIAS"
+
+exec llama-server \
+  -m "$MODEL" \
+  --lora "$ADAPTER" \
+  --reasoning off \
+  -c 32768 \
+  --port "$PORT" \
+  --alias "$ALIAS"

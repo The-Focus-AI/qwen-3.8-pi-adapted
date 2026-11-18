@@ -1,0 +1,16 @@
+{
+  "$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "local": {
+      "baseUrl": "http://127.0.0.1:9931/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": [
+        {
+          "id": "qwen3.8-pi",
+          "name": "Qwen3.8 Pi-adapted (LoRA)"
+        }
+      ]
+    }
+  }
+}

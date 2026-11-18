@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "inference-optimisation": {
+      "source": "sybil-solutions/inference-optimisation-skill",
+      "commit": "fda968e7fc1996aa23c67139c755fe541c9d4be0",
+      "sourceType": "github",
+      "skillPath": "skills/inference-optimisation/SKILL.md",
+      "computedHash": "01663538a4e58ec3455b0c8e793b096363d2e748d071f4a2b8203f22dad79d5e"
+    }
+  }
+}

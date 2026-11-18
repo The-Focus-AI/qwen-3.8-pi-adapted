@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#MISE description="Install llama.cpp (brew), local pi (npm), and project extensions"
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+# --- llama.cpp (Homebrew) ---------------------------------------------------
+if command -v llama-server >/dev/null 2>&1; then
+  echo "llama-server found: $(command -v llama-server)"
+else
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "llama-server not found and Homebrew is missing. Install brew, then re-run: mise run setup" >&2
+    exit 1
+  fi
+  echo "llama-server not found — installing llama.cpp via Homebrew..."
+  brew install llama.cpp
+  if ! command -v llama-server >/dev/null 2>&1; then
+    echo "brew install llama.cpp finished but llama-server is still not on PATH." >&2
+    exit 1
+  fi
+  echo "llama-server ready: $(command -v llama-server)"
+fi
+
+# --- Node deps (local pi) ---------------------------------------------------
+install_js() {
+  if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+    echo "Installing JS deps with pnpm..."
+    pnpm install
+  elif [[ -f yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
+    echo "Installing JS deps with yarn..."
+    yarn install
+  else
+    echo "Installing JS deps with npm..."
+    npm install --ignore-scripts
+  fi
+}
+
+install_js
+
+PI_BIN="./node_modules/.bin/pi"
+if [[ ! -x "$PI_BIN" ]]; then
+  echo "Local pi binary missing after install: $PI_BIN" >&2
+  echo "Ensure @earendil-works/pi-coding-agent is in package.json dependencies." >&2
+  exit 1
+fi
+
+echo "Using local pi: $PI_BIN ($("$PI_BIN" --version 2>/dev/null || echo unknown))"
+
+# --- Project-local agent models (openai-compatible → llama-server) ----------
+mkdir -p .pi/agent
+if [[ ! -f .pi/agent/models.json ]]; then
+  cat > .pi/agent/models.json <<'EOF'
+{
+  "$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "local": {
+      "baseUrl": "http://127.0.0.1:9931/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": [
+        {
+          "id": "qwen3.8-pi",
+          "name": "Qwen3.8 Pi-adapted (LoRA)"
+        }
+      ]
+    }
+  }
+}
+EOF
+  echo "Wrote .pi/agent/models.json"
+else
+  echo "models.json present: .pi/agent/models.json"
+fi
+
+# --- Optional: project-local pi-llama extension (builtin covers llama.cpp) --
+if [[ -f .pi/settings.json ]] && grep -q 'huggingface/pi-llama' .pi/settings.json; then
+  echo "Extension already local: git:github.com/huggingface/pi-llama"
+else
+  echo "Installing pi-llama extension project-locally (-l)..."
+  PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$PWD/.pi/agent}" \
+    "$PI_BIN" install -l git:github.com/huggingface/pi-llama
+fi
+
+echo
+echo "Setup complete."
+echo "  mise run serve   # start llama.cpp with Pi LoRA"
+echo "  mise run pi      # talk to it via local pi (model: local/qwen3.8-pi)"
