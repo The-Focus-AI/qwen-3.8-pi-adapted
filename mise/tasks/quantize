@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#MISE description="Requant Q8_0 → Q5_K_M / Q4_K_M / Q3_K_M locally (TYPE=q5|q4|q3|all)"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+SRC="${SRC:-$WEIGHTS/Qwen3.8-27B-Q8_0.gguf}"
+TYPE="${TYPE:-all}"
+THREADS="${THREADS:-0}" # 0 = llama-quantize default
+
+if [[ ! -f "$SRC" ]]; then
+  echo "Source missing: $SRC" >&2
+  exit 1
+fi
+
+run_one() {
+  local q="$1"
+  local out="$WEIGHTS/Qwen3.8-27B-${q}.gguf"
+  if [[ -f "$out" ]]; then
+    echo "Already present: $out"
+    return 0
+  fi
+  echo "Quantizing → $out ($q, allow-requantize, leave-output-tensor) ..."
+  local args=(--allow-requantize --leave-output-tensor "$SRC" "$out" "$q")
+  if [[ "$THREADS" != "0" ]]; then
+    args+=("$THREADS")
+  fi
+  llama-quantize "${args[@]}"
+  ls -lh "$out"
+}
+
+case "$(echo "$TYPE" | tr '[:upper:]' '[:lower:]')" in
+  q5|q5_k_m) run_one Q5_K_M ;;
+  q4|q4_k_m) run_one Q4_K_M ;;
+  q3|q3_k_m) run_one Q3_K_M ;;
+  all)
+    run_one Q5_K_M
+    run_one Q4_K_M
+    run_one Q3_K_M
+    ;;
+  *)
+    echo "TYPE=$TYPE — use q5, q4, q3, or all" >&2
+    exit 1
+    ;;
+esac

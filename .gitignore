@@ -17,6 +17,9 @@ mise.local.toml
 # Scratch experiments (not part of the shipped examples)
 work-test/
 
+# Inference hill-climb run logs (keep PLAN/ledger/configs/scripts)
+experiments/inference/logs/
+
 # Model weights (keep directory placeholders)
 weights/*
 !weights/.gitignore

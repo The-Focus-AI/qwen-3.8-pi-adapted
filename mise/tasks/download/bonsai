@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Download Ternary-Bonsai-2-27B Q2_0 GGUF (no Pi LoRA; extreme quant)"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+# Upstream-compatible packing for Homebrew llama.cpp >= b11555
+MODEL_NAME="${BONSAI_MODEL_NAME:-Ternary-Bonsai-2-27B-Q2_0.gguf}"
+REPO="${BONSAI_MODEL_REPO:-prism-ml/Ternary-Bonsai-2-27B-gguf}"
+MODEL="$WEIGHTS/$MODEL_NAME"
+
+mkdir -p "$WEIGHTS"
+
+if [[ -f "$MODEL" ]]; then
+  echo "Already present: $MODEL"
+  exit 0
+fi
+
+echo "Downloading $MODEL_NAME from $REPO → $WEIGHTS/ ..."
+echo "Note: Bonsai is ternary/Hadamard — Pi LoRA will not apply; use mise run serve:bonsai"
+hf download "$REPO" "$MODEL_NAME" --local-dir "$WEIGHTS"
+echo "Done: $MODEL"

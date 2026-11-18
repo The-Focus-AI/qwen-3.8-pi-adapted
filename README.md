@@ -12,7 +12,7 @@ Install these once on the machine:
 - [Homebrew](https://brew.sh/)
 - Hugging Face CLI (`hf`), e.g. `pip install -U huggingface_hub`
 
-You need enough disk for ~27 GB of weights under `weights/`, and enough RAM/GPU for a 27B Q8 model plus LoRA.
+You need enough disk for weights under `weights/` (default **Q4_K_M** ~16 GB, or Q8 ~27 GB), and enough RAM/GPU for the chosen quant plus LoRA.
 
 ## 2. Bootstrap the project
 
@@ -37,7 +37,9 @@ npx skills add https://github.com/sybil-solutions/inference-optimisation-skill
 
 This installs the skill into the project (see `.agents/skills/` / `.claude/skills/` and `skills-lock.json`). Use it from your agent when you want to bench or hill-climb inference settings against the local server.
 
-## 4. Download the weights
+## 4. Download the weights (optional)
+
+`mise run serve` will download the default model + LoRA if they are missing. To prefetch explicitly:
 
 ```bash
 mise run download
@@ -47,14 +49,17 @@ Files land in `weights/` (gitignored):
 
 | File | Source |
 |---|---|
-| `Qwen3.8-27B-Q8_0.gguf` | `ggml-org/Qwen3.8-27B-GGUF` |
+| `Qwen3.8-27B-Q4_K_M.gguf` (default) | Hub, or `TYPE=q4 mise run quantize` from Q8 |
+| `Qwen3.8-27B-Q8_0.gguf` | `QUANT=q8 mise run download:model` |
 | `Qwen3.8-27B-pi-lora-F16.gguf` | `harness-hub/Qwen3.8-27B-pi-adapted-GGUF` |
 
 Or pull them separately:
 
 ```bash
-mise run download:model
+mise run download:model          # default QUANT=q4
+QUANT=q8 mise run download:model
 mise run download:adapter
+TYPE=all mise run quantize       # local Q5/Q4/Q3 from Q8
 ```
 
 If a download fails with “revision not found”, list the repo and adjust:
@@ -65,19 +70,33 @@ hf repo ls harness-hub/Qwen3.8-27B-pi-adapted-GGUF
 
 ## 5. Start the server
 
-In one terminal:
+In one terminal (after `mise install`):
 
 ```bash
 mise run serve
 ```
 
-This starts `llama-server` with the base GGUF + LoRA, reasoning off, 32k context, port **9931**, alias **qwen3.8-pi**.
+On a fresh clone this downloads **Q4_K_M** + Pi LoRA if needed, then starts `llama-server` (reasoning off, port **9931**, alias **qwen3.8-pi**, context from `mise.local.toml`). Override with `QUANT=q8 mise run serve` or `MODEL=weights/...`.
 
-Leave it running. For the base model without LoRA:
+Leave it running. Alternatives:
 
 ```bash
-mise run serve:raw
+mise run serve:raw      # same quant default, no LoRA
+mise run serve:bonsai   # Ternary-Bonsai Q2_0 (downloads if missing; no LoRA)
 ```
+
+### Throughput (M4 Max 64 GB, local benches)
+
+Hill-climb on this machine (c1 decode, median of 6, LoRA on, reasoning off):
+
+| Quant | c1 tok/s | Notes |
+|---|---:|---|
+| Q8_0 | ~14 | previous default |
+| Q5_K_M (local requant) | ~15 | slower than Q4 |
+| **Q4_K_M (default)** | **~19.5** | **+34% vs Q8** — shipped default |
+| Q3_K_M (local requant) | ~16 | slower than Q4 on Metal |
+
+Details and experiment log: `experiments/inference/PLAN.md`.
 
 ## 6. Talk to it with π
 
@@ -130,8 +149,11 @@ mise run pi -- --print --no-session "The capital of France?"
 | `mise install` / `mise run setup` | Node, llama.cpp, local pi, project `.pi` config |
 | `npx skills add https://github.com/sybil-solutions/inference-optimisation-skill` | Install the optimisation skill |
 | `mise run download` | Base model + LoRA into `weights/` |
-| `mise run serve` | llama.cpp with Pi LoRA on `:9931` |
+| `mise run serve` | Q4 + Pi LoRA on `:9931` (auto-download if missing) |
+| `QUANT=q8 mise run serve` | Q8 + LoRA instead |
 | `mise run serve:raw` | llama.cpp base model only |
+| `mise run serve:bonsai` | Ternary Bonsai Q2_0 (no LoRA) |
+| `TYPE=all mise run quantize` | Local Q5/Q4/Q3 from Q8 |
 | `mise run pi` | Interactive π (optional prompt after `--`) |
 | `mise run ask -- "…"` | One-shot π with coding tools |
 

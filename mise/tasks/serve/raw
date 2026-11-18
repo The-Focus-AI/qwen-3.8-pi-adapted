@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
-#MISE description="Start llama.cpp with base Qwen only (no LoRA)"
+#MISE description="Start llama.cpp with base Qwen only — no LoRA (auto-downloads if missing)"
 set -euo pipefail
 
 WEIGHTS="${WEIGHTS:-weights}"
-MODEL="${MODEL:-$WEIGHTS/Qwen3.8-27B-Q8_0.gguf}"
+QUANT="${QUANT:-q4}"
+if [[ -z "${MODEL:-}" ]]; then
+  case "$(echo "$QUANT" | tr '[:upper:]' '[:lower:]')" in
+    q8|q8_0) MODEL="$WEIGHTS/Qwen3.8-27B-Q8_0.gguf" ;;
+    q5|q5_k_m) MODEL="$WEIGHTS/Qwen3.8-27B-Q5_K_M.gguf" ;;
+    q4|q4_k_m) MODEL="$WEIGHTS/Qwen3.8-27B-Q4_K_M.gguf" ;;
+    q3|q3_k_m) MODEL="$WEIGHTS/Qwen3.8-27B-Q3_K_M.gguf" ;;
+    *) echo "Unknown QUANT=$QUANT" >&2; exit 1 ;;
+  esac
+fi
 PORT="${PORT:-9931}"
 ALIAS="${ALIAS:-qwen3.8}"
 CONTEXT="${CONTEXT:-32768}"
 
+mkdir -p "$WEIGHTS"
 if [[ ! -f "$MODEL" ]]; then
-  echo "Base model not found: $MODEL — run: mise run download:model" >&2
+  echo "Base model missing: $MODEL — downloading (QUANT=$QUANT) ..."
+  QUANT="$QUANT" mise run download:model
+fi
+if [[ ! -f "$MODEL" ]]; then
+  echo "Base model still missing after download: $MODEL" >&2
   exit 1
 fi
 

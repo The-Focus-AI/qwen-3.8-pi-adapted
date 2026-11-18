@@ -1,0 +1,16 @@
+{
+  "name": "q4-k-m-local",
+  "model_file": "weights/Qwen3.8-27B-Q4_K_M.gguf",
+  "lora": "weights/Qwen3.8-27B-pi-lora-F16.gguf",
+  "context": 131072,
+  "port": 9931,
+  "alias": "qwen3.8-pi",
+  "reasoning": "off",
+  "c1_decode_median": 19.45,
+  "vs_q8_ctl_b": "+34%",
+  "quality": "labelled lossy — local requant from Q8_0 with --allow-requantize --leave-output-tensor",
+  "rejected": {
+    "Q5_K_M": "15.18 tok/s — slower than Q4",
+    "Q3_K_M": "15.59 tok/s — slower than Q4 (Metal dequant likely)"
+  }
+}

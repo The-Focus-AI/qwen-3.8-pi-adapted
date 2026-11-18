@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Start llama.cpp with Ternary-Bonsai-2-27B Q2_0 (no LoRA; auto-download)"
+set -euo pipefail
+
+WEIGHTS="${WEIGHTS:-weights}"
+MODEL="${MODEL:-$WEIGHTS/Ternary-Bonsai-2-27B-Q2_0.gguf}"
+PORT="${PORT:-9931}"
+ALIAS="${ALIAS:-bonsai-27b}"
+CONTEXT="${CONTEXT:-32768}"
+
+mkdir -p "$WEIGHTS"
+if [[ ! -f "$MODEL" ]]; then
+  echo "Bonsai model missing: $MODEL — downloading ..."
+  mise run download:bonsai
+fi
+if [[ ! -f "$MODEL" ]]; then
+  echo "Bonsai model still missing after download: $MODEL" >&2
+  exit 1
+fi
+
+echo "Model:   $MODEL"
+echo "Port:    $PORT"
+echo "Alias:   $ALIAS"
+echo "Context: $CONTEXT"
+echo "(Bonsai Q2_0 — no LoRA; labelled extreme lossy)"
+
+exec llama-server \
+  -m "$MODEL" \
+  --reasoning off \
+  -c "$CONTEXT" \
+  --port "$PORT" \
+  --alias "$ALIAS"
